@@ -2303,14 +2303,24 @@ unsafe fn public_window_callback_inner<T: 'static>(
         WM_NCHITTEST => {
             use crate::event::WindowEvent::HitTest;
 
+            // cursor location
             let x = super::get_x_lparam(lparam as u32) as i32;
             let y = super::get_y_lparam(lparam as u32) as i32;
 
+            let mut area = if !util::is_maximized(window)
+                && !userdata.window_state_lock()
+                            .window_flags()
+                            .contains(WindowFlags::MARKER_DECORATIONS)
+            {
+                // Allow resizing unmaximized borderless window
+                crate::platform_impl::hit_test(window, x, y)
+            } else {
+                let default = DefWindowProcW(window, msg, wparam, lparam);
+                WindowArea::from_wm_nchittesst(default)
+            };
+
             let mut pt = POINT { x, y };
             ScreenToClient(window, &mut pt);
-
-            let default = DefWindowProcW(window, msg, wparam, lparam);
-            let mut area = WindowArea::from_wm_nchittesst(default);
 
             userdata.send_event(Event::WindowEvent {
                 window_id: RootWindowId(WindowId(window)),

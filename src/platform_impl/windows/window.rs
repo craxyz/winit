@@ -40,7 +40,7 @@ use windows_sys::Win32::{
         },
         WindowsAndMessaging::{
             CreateWindowExW, FlashWindowEx, GetClientRect, GetCursorPos, GetForegroundWindow,
-            GetSystemMetrics, GetWindowPlacement, GetWindowTextLengthW, GetWindowTextW,
+            GetSystemMetrics, GetWindowPlacement, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
             IsWindowVisible, LoadCursorW, PeekMessageW, PostMessageW, RegisterClassExW, SetCursor,
             SetCursorPos, SetForegroundWindow, SetWindowDisplayAffinity, SetWindowPlacement,
             SetWindowPos, SetWindowTextW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, FLASHWINFO,
@@ -72,7 +72,8 @@ use crate::{
     },
     window::{
         CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, Theme, UserAttentionType,
-        WindowAttributes, WindowButtons, WindowLevel,
+        WindowAttributes, WindowButtons, WindowLevel, WindowArea,
+        BORDERLESS_RESIZE_INSET,
     },
 };
 
@@ -1316,4 +1317,54 @@ unsafe fn force_window_active(handle: HWND) {
     );
 
     SetForegroundWindow(handle);
+}
+
+pub fn hit_test(hwnd: HWND, cx: i32, cy: i32) -> WindowArea {
+    let mut window_rect: RECT = unsafe { mem::zeroed() };
+    unsafe {
+        if GetWindowRect(hwnd, <*mut _>::cast(&mut window_rect)) != 0 {
+            const CLIENT: isize = 0b0000;
+            const LEFT: isize = 0b0001;
+            const RIGHT: isize = 0b0010;
+            const TOP: isize = 0b0100;
+            const BOTTOM: isize = 0b1000;
+            const TOPLEFT: isize = TOP | LEFT;
+            const TOPRIGHT: isize = TOP | RIGHT;
+            const BOTTOMLEFT: isize = BOTTOM | LEFT;
+            const BOTTOMRIGHT: isize = BOTTOM | RIGHT;
+
+            let RECT {
+                left,
+                right,
+                bottom,
+                top,
+            } = window_rect;
+
+            let dpi = hwnd_dpi(hwnd);
+            let scale_factor = dpi_to_scale_factor(dpi);
+            let inset = (BORDERLESS_RESIZE_INSET as f64 * scale_factor) as i32;
+
+            #[rustfmt::skip]
+            let result =
+                (LEFT * (if cx < (left + inset) { 1 } else { 0 }))
+                | (RIGHT * (if cx >= (right - inset) { 1 } else { 0 }))
+                | (TOP * (if cy < (top + inset) { 1 } else { 0 }))
+                | (BOTTOM * (if cy >= (bottom - inset) { 1 } else { 0 }));
+
+            match result {
+                CLIENT => WindowArea::CLIENT,
+                LEFT => WindowArea::LEFT,
+                RIGHT => WindowArea::RIGHT,
+                TOP => WindowArea::TOP,
+                BOTTOM => WindowArea::BOTTOM,
+                TOPLEFT => WindowArea::TOPLEFT,
+                TOPRIGHT => WindowArea::TOPRIGHT,
+                BOTTOMLEFT => WindowArea::BOTTOMLEFT,
+                BOTTOMRIGHT => WindowArea::BOTTOMRIGHT,
+                _ => WindowArea::NOWHERE,
+            }
+        } else {
+            WindowArea::NOWHERE
+        }
+    }
 }

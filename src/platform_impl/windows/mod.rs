@@ -11,7 +11,7 @@ pub(crate) use self::{
     },
     icon::WinIcon,
     monitor::{MonitorHandle, VideoMode},
-    window::Window,
+    window::{hit_test, Window},
 };
 
 pub use self::icon::WinIcon as PlatformIcon;
